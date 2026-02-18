@@ -1,8 +1,8 @@
+import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promises as fs, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, "..");
@@ -27,7 +27,7 @@ async function main() {
       path.join(ROOT_DIR, "package.json"),
       path.join(ROOT_DIR, "pnpm-lock.yaml"),
       A2UI_RENDERER_DIR,
-      A2UI_APP_DIR
+      A2UI_APP_DIR,
     ];
 
     const files = [];
@@ -75,16 +75,21 @@ async function main() {
     }
 
     console.log("Building A2UI bundle...");
-    
+
     // Run tsc
-    execSync(`pnpm -s exec tsc -p "${path.join(A2UI_RENDERER_DIR, "tsconfig.json")}"`, { stdio: "inherit", cwd: ROOT_DIR });
-    
+    execSync(`pnpm -s exec tsc -p "${path.join(A2UI_RENDERER_DIR, "tsconfig.json")}"`, {
+      stdio: "inherit",
+      cwd: ROOT_DIR,
+    });
+
     // Run rolldown
-    execSync(`pnpm exec rolldown -c "${path.join(A2UI_APP_DIR, "rolldown.config.mjs")}"`, { stdio: "inherit", cwd: ROOT_DIR });
+    execSync(`pnpm exec rolldown -c "${path.join(A2UI_APP_DIR, "rolldown.config.mjs")}"`, {
+      stdio: "inherit",
+      cwd: ROOT_DIR,
+    });
 
     await fs.writeFile(HASH_FILE, current_hash);
     console.log("A2UI bundle built successfully.");
-
   } catch (err) {
     console.error("A2UI bundling failed. Re-run with: pnpm canvas:a2ui:bundle");
     console.error(err);
