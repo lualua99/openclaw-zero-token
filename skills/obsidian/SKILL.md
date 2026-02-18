@@ -7,22 +7,22 @@ metadata:
     "openclaw":
       {
         "emoji": "💎",
-        "requires": { "bins": ["obsidian-cli"] },
+        "requires": { "bins": ["notesmd"] },
         "install":
           [
             {
               "id": "brew",
               "kind": "brew",
-              "formula": "yakitrak/yakitrak/obsidian-cli",
-              "bins": ["obsidian-cli"],
+              "formula": "yakitrak/yakitrak/notesmd-cli",
+              "bins": ["notesmd"],
               "label": "Install obsidian-cli (brew)",
             },
             {
               "id": "go",
               "kind": "go",
-              "module": "github.com/yakitrak/obsidian-cli@latest",
-              "bins": ["obsidian-cli"],
-              "label": "Install obsidian-cli (go)",
+              "module": "github.com/Yakitrak/notesmd-cli@latest",
+              "bins": ["notesmd"],
+              "label": "Install notesmd-cli (go)",
             },
           ],
       },

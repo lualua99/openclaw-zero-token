@@ -20,7 +20,7 @@ metadata:
             {
               "id": "go",
               "kind": "go",
-              "module": "github.com/openhue/openhue-cli/cmd/openhue@latest",
+              "module": "github.com/openhue/openhue-cli@latest",
               "bins": ["openhue"],
               "label": "Install OpenHue CLI (go)",
             },

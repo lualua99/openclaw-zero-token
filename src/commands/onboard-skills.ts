@@ -191,7 +191,22 @@ export async function setupSkills(
       if (!target || target.install.length === 0) {
         continue;
       }
-      const installId = target.install[0]?.id;
+      const options = target.install;
+      const getBestInstallId = (opts: typeof options) => {
+        if (opts.length === 0) return undefined;
+        if (process.platform === "win32") {
+          const scoop = opts.find((o) => o.kind === "scoop");
+          if (scoop) return scoop.id ?? "scoop";
+          const go = opts.find((o) => o.kind === "go");
+          if (go) return go.id ?? "go";
+        } else if (process.platform === "darwin" || process.platform === "linux") {
+          const brew = opts.find((o) => o.kind === "brew");
+          if (brew) return brew.id ?? "brew";
+        }
+        return opts[0]?.id;
+      };
+
+      const installId = getBestInstallId(options);
       if (!installId) {
         continue;
       }

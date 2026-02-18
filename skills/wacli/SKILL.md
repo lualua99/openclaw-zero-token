@@ -7,6 +7,7 @@ metadata:
     "openclaw":
       {
         "emoji": "📱",
+        "os": ["darwin", "linux"],
         "requires": { "bins": ["wacli"] },
         "install":
           [
