@@ -26,11 +26,11 @@ OpenClaw Zero Token is a fork of [OpenClaw](https://github.com/openclaw/openclaw
 | Platform | Status | Models |
 |----------|--------|--------|
 | DeepSeek | ✅ **Currently Supported** | deepseek-chat, deepseek-reasoner |
-| Doubao (豆包) | � Coming Soon | - |
-| Claude Web | � Coming Soon | - |
-| ChatGPT Web | � Coming Soon | - |
+| Doubao (豆包) | ✅ **Currently Supported** | doubao (via doubao-free-api) |
+| Claude Web | 🔜 Coming Soon | - |
+| ChatGPT Web | 🔜 Coming Soon | - |
 
-> **Note:** Currently, only **DeepSeek** is fully supported. Support for Doubao, Claude, and ChatGPT is under active research and development.
+> **Note:** Doubao requires [doubao-free-api](https://github.com/linuxhsj/doubao-free-api) proxy. See "Doubao Implementation & Deployment" below for details.
 
 ---
 
@@ -55,10 +55,10 @@ OpenClaw Zero Token is a fork of [OpenClaw](https://github.com/openclaw/openclaw
 │                                    │                                         │
 │  ┌─────────────────────────────────┼─────────────────────────────────────┐  │
 │  │                          Provider Layer                               │  │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌───────────┐  │  │
-│  │  │ DeepSeek API │  │ DeepSeek Web │  │   OpenAI     │  │ Anthropic │  │  │
-│  │  │   (Token)    │  │  (Zero Token)│  │   (Token)    │  │  (Token)  │  │  │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘  └───────────┘  │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │  │
+│  │  │ DeepSeek Web │  │ Doubao Proxy │  │   OpenAI     │  │ Anthropic   │  │  │
+│  │  │ (Zero Token) │  │ (Zero Token) │  │   (Token)    │  │  (Token)    │  │  │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘  │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -116,6 +116,121 @@ OpenClaw Zero Token is a fork of [OpenClaw](https://github.com/openclaw/openclaw
 | **Credential Capture** | Network request interception, Authorization Header extraction |
 | **PoW Challenge** | WASM SHA3 computation for anti-bot bypass |
 | **Streaming Response** | SSE parsing + custom tag parser |
+
+---
+
+## Doubao Implementation & Deployment
+
+### Overview
+
+Doubao integration uses **web Cookie authentication** (no official API key required):
+
+```
+Browser login → Get sessionid (F12 → Application → Cookies) →
+  doubao-proxy: Pass sessionid to local proxy, proxy calls Doubao API internally
+  doubao-web: Direct Cookie-based requests to Doubao internal API (fallback, SSE format may change)
+```
+
+**Recommended: doubao-proxy** — Use [doubao-free-api](https://github.com/linuxhsj/doubao-free-api) for an OpenAI-compatible interface; more stable and easier to debug.
+
+### Two Approaches Compared
+
+| Approach | Recommended | API Endpoint | Auth | Request/Response |
+|----------|-------------|--------------|------|-------------------|
+| **doubao-proxy** | ★ Yes | Local `http://127.0.0.1:8000/v1/chat/completions` | Bearer Token (sessionid) | Standard OpenAI format |
+| **doubao-web** | Fallback | `https://www.doubao.com/...` direct | Cookie (sessionid, ttwid, etc.) | Doubao custom SSE |
+
+### Code Structure
+
+```
+src/
+├── providers/
+│   ├── doubao-web-auth.ts      # Browser login & credential capture
+│   └── doubao-web-client.ts    # Doubao web API client (for doubao-web)
+├── agents/
+│   ├── doubao-web-stream.ts    # doubao-web streaming response parser
+│   └── models-config.providers.ts  # doubao-proxy registration (api: openai-completions)
+└── commands/
+    ├── auth-choice.apply.doubao-proxy.ts   # doubao-proxy setup flow
+    ├── auth-choice.apply.doubao-web.ts     # doubao-web setup flow
+    └── onboard-auth.config-core.ts         # applyDoubaoProxyConfig etc.
+```
+
+### doubao-free-api Deployment
+
+Use [linuxhsj/doubao-free-api](https://github.com/linuxhsj/doubao-free-api). Supports text-to-image, image-to-image, image understanding, etc.
+
+#### Get sessionid
+
+1. Open [https://www.doubao.com](https://www.doubao.com) and log in
+2. Press F12 → Application → Cookies
+3. Copy the `sessionid` value
+
+#### Native Deployment (Recommended)
+
+```bash
+git clone https://github.com/linuxhsj/doubao-free-api.git
+cd doubao-free-api
+npm i
+npm run build
+npm start   # or: pm2 start dist/index.js --name doubao-free-api
+```
+
+#### Docker Deployment
+
+```bash
+docker run -it -d --init --name doubao-free-api -p 8000:8000 \
+  -e TZ=Asia/Shanghai linuxhsj/doubao-free-api:latest
+
+docker logs -f doubao-free-api
+```
+
+#### Docker Compose
+
+```yaml
+version: '3'
+services:
+  doubao-free-api:
+    container_name: doubao-free-api
+    image: linuxhsj/doubao-free-api:latest
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - TZ=Asia/Shanghai
+```
+
+#### OpenClaw Configuration
+
+1. Run `node openclaw.mjs onboard`, select **Doubao** → **doubao-proxy**
+2. Default baseUrl: `http://127.0.0.1:8000/v1` (change if proxy runs elsewhere)
+3. Paste sessionid to finish setup
+
+#### Verification
+
+```bash
+curl -N -X POST "http://127.0.0.1:8000/v1/chat/completions" \
+  -H "Authorization: Bearer <sessionid>" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"doubao","messages":[{"role":"user","content":"Hello"}],"stream":true}'
+```
+
+If SSE stream is returned, the proxy is working.
+
+### Auth & Config Storage
+
+| Location | Description |
+|----------|-------------|
+| `auth-profiles.json` | `doubao-proxy:default` → `key` is sessionid |
+| `openclaw.json` | `models.providers["doubao-proxy"].baseUrl`, `agents.defaults.model.primary` |
+| Env var | Optional `DOUBAO_PROXY_SESSIONID` |
+
+### Notes
+
+- **sessionid expiry**: Doubao sessions expire; re-login and update sessionid when needed
+- **Multi-account**: doubao-free-api supports `Authorization: Bearer sessionid1,sessionid2`
+- **Port**: Default 8000; ensure firewall/security group allows it
+- **Compliance**: Reverse API for personal use only; use [Volcengine official API](https://www.volcengine.com/product/doubao) for commercial use
 
 ---
 
@@ -249,11 +364,11 @@ node openclaw.mjs tui
 
 ### Current Focus
 - ✅ DeepSeek Web authentication (stable)
+- ✅ Doubao via doubao-free-api
 - 🔧 Improving credential capture reliability
 - 📝 Documentation improvements
 
 ### Planned Features
-- 🔜 Doubao (豆包) Web authentication support
 - 🔜 Claude Web authentication support
 - 🔜 ChatGPT Web authentication support
 - 🔜 Auto-refresh for expired sessions

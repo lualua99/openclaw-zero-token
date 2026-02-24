@@ -155,6 +155,17 @@ const DEEPSEEK_WEB_DEFAULT_COST = {
   cacheWrite: 0,
 };
 
+export const DOUBAO_WEB_BASE_URL = "https://www.doubao.com";
+export const DOUBAO_WEB_DEFAULT_MODEL_ID = "doubao-seed-2.0";
+const DOUBAO_WEB_DEFAULT_CONTEXT_WINDOW = 64000;
+const DOUBAO_WEB_DEFAULT_MAX_TOKENS = 8192;
+const DOUBAO_WEB_DEFAULT_COST = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+};
+
 const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
 const NVIDIA_DEFAULT_MODEL_ID = "nvidia/llama-3.1-nemotron-70b-instruct";
 const NVIDIA_DEFAULT_CONTEXT_WINDOW = 131072;
@@ -701,6 +712,53 @@ export async function buildDeepseekWebProvider(params?: {
   };
 }
 
+export async function discoverDoubaoWebModels(params?: {
+  apiKey?: string;
+}): Promise<ModelDefinitionConfig[]> {
+  if (params?.apiKey) {
+    try {
+      const auth = JSON.parse(params.apiKey);
+      const { DoubaoWebClient } = await import("../providers/doubao-web-client.js");
+      const client = new DoubaoWebClient(auth);
+      return (await client.discoverModels()) as ModelDefinitionConfig[];
+    } catch (e) {
+      console.warn("[DoubaoWeb] Dynamic discovery failed, falling back to built-in list:", e);
+    }
+  }
+
+  return [
+    {
+      id: "doubao-seed-2.0",
+      name: "Doubao-Seed 2.0 (Web)",
+      reasoning: true,
+      input: ["text"],
+      cost: DOUBAO_WEB_DEFAULT_COST,
+      contextWindow: DOUBAO_WEB_DEFAULT_CONTEXT_WINDOW,
+      maxTokens: DOUBAO_WEB_DEFAULT_MAX_TOKENS,
+    },
+    {
+      id: "doubao-pro",
+      name: "Doubao Pro (Web)",
+      reasoning: false,
+      input: ["text"],
+      cost: DOUBAO_WEB_DEFAULT_COST,
+      contextWindow: DOUBAO_WEB_DEFAULT_CONTEXT_WINDOW,
+      maxTokens: DOUBAO_WEB_DEFAULT_MAX_TOKENS,
+    },
+  ];
+}
+
+export async function buildDoubaoWebProvider(params?: {
+  apiKey?: string;
+}): Promise<ProviderConfig> {
+  const models = await discoverDoubaoWebModels(params);
+  return {
+    baseUrl: DOUBAO_WEB_BASE_URL,
+    api: "doubao-web",
+    models,
+  };
+}
+
 export function buildNvidiaProvider(): ProviderConfig {
   return {
     baseUrl: NVIDIA_BASE_URL,
@@ -939,6 +997,52 @@ export async function resolveImplicitProviders(params: {
     ...(await buildDeepseekWebProvider({ apiKey: deepseekWebKey })),
     apiKey: deepseekWebKey,
   };
+
+  const doubaoWebKey =
+    resolveEnvApiKeyVarName("doubao-web") ??
+    resolveApiKeyFromProfiles({ provider: "doubao-web", store: authStore });
+
+  providers["doubao-web"] = {
+    ...(await buildDoubaoWebProvider({ apiKey: doubaoWebKey })),
+    apiKey: doubaoWebKey,
+  };
+
+  const doubaoProxyKey =
+    resolveEnvApiKeyVarName("doubao-proxy") ??
+    resolveApiKeyFromProfiles({ provider: "doubao-proxy", store: authStore });
+
+  if (doubaoProxyKey) {
+    const existingProvider = params.explicitProviders?.["doubao-proxy"] as
+      | { baseUrl?: string; models?: ModelDefinitionConfig[] }
+      | undefined;
+    let baseUrl =
+      typeof existingProvider?.baseUrl === "string" && existingProvider.baseUrl.trim()
+        ? existingProvider.baseUrl.trim().replace(/\/+$/, "")
+        : "http://127.0.0.1:8000";
+    if (!baseUrl.endsWith("/v1")) {
+      baseUrl = `${baseUrl}/v1`;
+    }
+    const models: ModelDefinitionConfig[] =
+      Array.isArray(existingProvider?.models) && existingProvider.models.length > 0
+        ? existingProvider.models
+        : [
+            {
+              id: "doubao",
+              name: "Doubao (via proxy)",
+              reasoning: false,
+              input: ["text"],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 64000,
+              maxTokens: 8192,
+            },
+          ];
+    providers["doubao-proxy"] = {
+      baseUrl,
+      api: "openai-completions",
+      apiKey: doubaoProxyKey,
+      models,
+    };
+  }
 
   return providers;
 }

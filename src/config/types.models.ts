@@ -6,7 +6,8 @@ export type ModelApi =
   | "github-copilot"
   | "bedrock-converse-stream"
   | "ollama"
-  | "deepseek-web";
+  | "deepseek-web"
+  | "doubao-web";
 
 export type ModelCompatConfig = {
   supportsStore?: boolean;

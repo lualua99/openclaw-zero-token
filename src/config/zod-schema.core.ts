@@ -12,6 +12,7 @@ export const ModelApiSchema = z.union([
   z.literal("bedrock-converse-stream"),
   z.literal("ollama"),
   z.literal("deepseek-web"),
+  z.literal("doubao-web"),
 ]);
 
 export const ModelCompatSchema = z

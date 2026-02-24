@@ -26,11 +26,11 @@ OpenClaw Zero Token 是 [OpenClaw](https://github.com/openclaw/openclaw) 的分�
 | 平台 | 状态 | 模型 |
 |-----|------|------|
 | DeepSeek | ✅ **当前支持** | deepseek-chat, deepseek-reasoner |
-| 豆包 (Doubao) | 🔜 计划中 | - |
+| 豆包 (Doubao) | ✅ **当前支持** | doubao（via doubao-free-api） |
 | Claude Web | 🔜 计划中 | - |
 | ChatGPT Web | 🔜 计划中 | - |
 
-> **注意：** 当前仅支持 **DeepSeek**，豆包、Claude、ChatGPT 的支持正在研究和开发中。
+> **注意：** 豆包需配合 [doubao-free-api](https://github.com/linuxhsj/doubao-free-api) 代理使用，详见下文「豆包实现原理与部署」。
 
 ---
 
@@ -55,10 +55,10 @@ OpenClaw Zero Token 是 [OpenClaw](https://github.com/openclaw/openclaw) 的分�
 │                                    │                                         │
 │  ┌─────────────────────────────────┼─────────────────────────────────────┐  │
 │  │                          Provider Layer                               │  │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌───────────┐  │  │
-│  │  │ DeepSeek API │  │ DeepSeek Web │  │   OpenAI     │  │ Anthropic │  │  │
-│  │  │   (Token)    │  │  (Zero Token)│  │   (Token)    │  │  (Token)  │  │  │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘  └───────────┘  │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │  │
+│  │  │ DeepSeek Web │  │ Doubao Proxy │  │   OpenAI     │  │ Anthropic   │  │  │
+│  │  │ (Zero Token) │  │ (Zero Token) │  │   (Token)    │  │  (Token)    │  │  │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘  │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -119,6 +119,136 @@ OpenClaw Zero Token 是 [OpenClaw](https://github.com/openclaw/openclaw) 的分�
 
 ---
 
+## 豆包实现原理与部署
+
+### 一、总体原理
+
+豆包集成基于**网页端 Cookie 认证**，不依赖官方 API Key：
+
+```
+浏览器登录豆包 → 获取 sessionid（F12 → Application → Cookies）→
+  doubao-proxy：将 sessionid 传给本地代理，代理内部用 Cookie 调用豆包 API
+  doubao-web：直接用 Cookie 冒充网页请求调用豆包内部 API（备选，SSE 格式易变）
+```
+
+**推荐使用 doubao-proxy**：通过 [doubao-free-api](https://github.com/linuxhsj/doubao-free-api) 本地代理，对外提供 OpenAI 兼容接口，更稳定、易调试。
+
+### 二、两种方案对比
+
+| 方案 | 推荐度 | API 端点 | 认证方式 | 请求/响应格式 |
+|------|--------|----------|----------|---------------|
+| **doubao-proxy** | ★ 推荐 | 本地 `http://127.0.0.1:8000/v1/chat/completions` | Bearer Token（sessionid） | 标准 OpenAI 格式 |
+| **doubao-web** | 备选 | `https://www.doubao.com/...` 直连 | Cookie（sessionid、ttwid 等） | 豆包自定义 SSE |
+
+### 三、技术架构与代码结构
+
+```
+src/
+├── providers/
+│   ├── doubao-web-auth.ts      # 豆包浏览器登录与凭证捕获
+│   └── doubao-web-client.ts    # 豆包网页 API 客户端（doubao-web 用）
+├── agents/
+│   ├── doubao-web-stream.ts    # doubao-web 流式响应解析
+│   └── models-config.providers.ts  # doubao-proxy 注册（api: openai-completions）
+└── commands/
+    ├── auth-choice.apply.doubao-proxy.ts   # doubao-proxy 配置流程
+    ├── auth-choice.apply.doubao-web.ts     # doubao-web 配置流程
+    └── onboard-auth.config-core.ts         # applyDoubaoProxyConfig 等
+```
+
+**doubao-proxy 数据流**（无需自定义 stream，复用 OpenAI 兼容路径）：
+
+```
+Web UI → chat.send → runEmbeddedAttempt → authStorage.getApiKey("doubao-proxy")
+  → streamSimple（PI-AI）→ fetch(baseUrl/chat/completions, Authorization: Bearer sessionid)
+  → doubao-free-api 代理转发到豆包 → 标准 SSE 流 → Web UI
+```
+
+**doubao-web 数据流**（需自定义 stream 解析豆包 SSE）：
+
+```
+Web UI → createDoubaoWebStreamFn(cookie) → DoubaoWebClient.chatCompletions(stream: true)
+  → fetch 豆包内部 API → 解析 event_type 2001/2003 等 → text_delta → Web UI
+```
+
+### 四、doubao-free-api 部署
+
+推荐使用 [linuxhsj/doubao-free-api](https://github.com/linuxhsj/doubao-free-api)，支持文生图、图生图、图文解读等。
+
+#### 4.1 获取 sessionid
+
+1. 打开 [https://www.doubao.com](https://www.doubao.com) 并登录
+2. 按 F12 打开开发者工具 → Application → Cookies
+3. 复制 `sessionid` 的值
+
+#### 4.2 原生部署（推荐）
+
+```bash
+git clone https://github.com/linuxhsj/doubao-free-api.git
+cd doubao-free-api
+npm i
+npm run build
+npm start   # 或 pm2 start dist/index.js --name doubao-free-api
+```
+
+#### 4.3 Docker 部署
+
+```bash
+docker run -it -d --init --name doubao-free-api -p 8000:8000 \
+  -e TZ=Asia/Shanghai linuxhsj/doubao-free-api:latest
+
+docker logs -f doubao-free-api
+```
+
+#### 4.4 Docker Compose 部署
+
+```yaml
+version: '3'
+services:
+  doubao-free-api:
+    container_name: doubao-free-api
+    image: linuxhsj/doubao-free-api:latest
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - TZ=Asia/Shanghai
+```
+
+#### 4.5 OpenClaw 配置
+
+1. 运行 `node openclaw.mjs onboard`，选择 **豆包 (Doubao)** → **doubao-proxy**
+2. baseUrl 默认 `http://127.0.0.1:8000/v1`（若代理在其他主机，改为对应地址）
+3. 粘贴 sessionid，完成配置
+
+#### 4.6 验证
+
+```bash
+curl -N -X POST "http://127.0.0.1:8000/v1/chat/completions" \
+  -H "Authorization: Bearer <sessionid>" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"doubao","messages":[{"role":"user","content":"你好"}],"stream":true}'
+```
+
+若返回 SSE 流，说明代理正常。
+
+### 五、认证与配置存储
+
+| 存储位置 | 说明 |
+|----------|------|
+| `auth-profiles.json` | `doubao-proxy:default` 的 `key` 即为 sessionid |
+| `openclaw.json` | `models.providers["doubao-proxy"].baseUrl`、`agents.defaults.model.primary` |
+| 环境变量 | 可选 `DOUBAO_PROXY_SESSIONID` |
+
+### 六、注意事项
+
+- **sessionid 存活**：豆包会定期失效，需重新登录并更新 sessionid
+- **多账号**：doubao-free-api 支持 `Authorization: Bearer sessionid1,sessionid2` 多路 token
+- **端口**：默认 8000，确保防火墙或云安全组放行
+- **合规**：逆向 API 仅供自用学习，商用请使用 [火山引擎官方 API](https://www.volcengine.com/product/doubao)
+
+---
+
 ## 快速开始
 
 ### 环境要求
@@ -155,6 +285,18 @@ node openclaw.mjs onboard
   > Automated Login (Recommended)  # 自动捕获凭证
     Manual Paste                   # 手动粘贴凭证
 ```
+
+### 使用已有 Chrome（可选）
+
+若希望用本机已安装的 Chrome、保留现有登录状态，可先以远程调试模式启动 Chrome，再在 onboard 向导中选择「使用已有 Chrome」：
+
+**macOS：**
+
+```bash
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
+```
+
+然后在另一个终端运行 `node openclaw.mjs onboard`，选择对应认证方式并选「Use Existing Chrome」即可。端口 `9222` 为项目默认 CDP 端口。
 
 ### 启动 Gateway
 
@@ -249,11 +391,11 @@ node openclaw.mjs tui
 
 ### 当前重点
 - ✅ DeepSeek Web 认证（稳定）
+- ✅ 豆包 via doubao-free-api
 - 🔧 提高凭证捕获可靠性
 - 📝 文档改进
 
 ### 计划功能
-- 🔜 豆包 Web 认证支持
 - 🔜 Claude Web 认证支持
 - 🔜 ChatGPT Web 认证支持
 - 🔜 过期会话自动刷新

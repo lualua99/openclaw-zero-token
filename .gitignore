@@ -100,6 +100,10 @@ apps/ios/LocalSigning.xcconfig
 lint_output*.txt
 ts_errors*.txt
 test-*.mjs
+test-doubao-*.js
+analyze-doubao*.ts
+scripts/analyze-doubao*.ts
+scripts/analyze-doubao*.js
 solve-wasm.mjs
 verify-final.mjs
 patch-client.mjs

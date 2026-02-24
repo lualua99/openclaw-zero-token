@@ -214,3 +214,6 @@ export function buildSiliconFlowModelDefinition(params: {
 
 export const DEEPSEEK_WEB_DEFAULT_MODEL_ID = "deepseek-chat";
 export const DEEPSEEK_WEB_DEFAULT_MODEL_REF = `deepseek-web/${DEEPSEEK_WEB_DEFAULT_MODEL_ID}`;
+
+export const DOUBAO_WEB_DEFAULT_MODEL_ID = "doubao-seed-2.0";
+export const DOUBAO_WEB_DEFAULT_MODEL_REF = `doubao-web/${DOUBAO_WEB_DEFAULT_MODEL_ID}`;

@@ -5,6 +5,7 @@ import {
 } from "../agents/huggingface-models.js";
 import {
   buildDeepseekWebProvider,
+  buildDoubaoWebProvider,
   buildQianfanProvider,
   buildXiaomiProvider,
   DEEPSEEK_WEB_DEFAULT_MODEL_ID,
@@ -566,4 +567,87 @@ export async function applyDeepseekWebProviderConfig(cfg: OpenClawConfig): Promi
 export async function applyDeepseekWebConfig(cfg: OpenClawConfig): Promise<OpenClawConfig> {
   const next = await applyDeepseekWebProviderConfig(cfg);
   return applyAgentDefaultModelPrimary(next, DEEPSEEK_WEB_DEFAULT_MODEL_REF);
+}
+
+export async function applyDoubaoWebProviderConfig(cfg: OpenClawConfig): Promise<OpenClawConfig> {
+  const models = { ...cfg.agents?.defaults?.models };
+  models["doubao-web/doubao-seed-2.0"] = {
+    ...models["doubao-web/doubao-seed-2.0"],
+    alias: models["doubao-web/doubao-seed-2.0"]?.alias ?? "Doubao Browser",
+  };
+  const defaultProvider = await buildDoubaoWebProvider();
+  return applyProviderConfigWithDefaultModels(cfg, {
+    agentModels: models,
+    providerId: "doubao-web",
+    api: "doubao-web",
+    baseUrl: defaultProvider.baseUrl,
+    defaultModels: defaultProvider.models ?? [],
+    defaultModelId: "doubao-seed-2.0",
+  });
+}
+
+export async function applyDoubaoWebConfig(cfg: OpenClawConfig): Promise<OpenClawConfig> {
+  const next = await applyDoubaoWebProviderConfig(cfg);
+  return applyAgentDefaultModelPrimary(next, "doubao-web/doubao-seed-2.0");
+}
+
+const DOUBAO_PROXY_DEFAULT_MODEL_ID = "doubao";
+const DOUBAO_PROXY_DEFAULT_MODEL_REF = `doubao-proxy/${DOUBAO_PROXY_DEFAULT_MODEL_ID}`;
+const DOUBAO_PROXY_DEFAULT_BASE_URL = "http://127.0.0.1:8000/v1";
+const DOUBAO_PROXY_DEFAULT_CONTEXT_WINDOW = 64000;
+const DOUBAO_PROXY_DEFAULT_MAX_TOKENS = 8192;
+const DOUBAO_PROXY_DEFAULT_COST = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+};
+
+export function applyDoubaoProxyProviderConfig(
+  cfg: OpenClawConfig,
+  params?: { baseUrl?: string; modelId?: string },
+): OpenClawConfig {
+  let baseUrl =
+    params?.baseUrl?.trim() ||
+    (cfg.models?.providers?.["doubao-proxy"] as { baseUrl?: string } | undefined)?.baseUrl?.trim() ||
+    DOUBAO_PROXY_DEFAULT_BASE_URL;
+  baseUrl = baseUrl.replace(/\/+$/, "");
+  if (!baseUrl.endsWith("/v1")) {
+    baseUrl = `${baseUrl}/v1`;
+  }
+  const modelId = params?.modelId?.trim() || DOUBAO_PROXY_DEFAULT_MODEL_ID;
+  const modelRef = `doubao-proxy/${modelId}`;
+
+  const models = { ...cfg.agents?.defaults?.models };
+  models[modelRef] = {
+    ...models[modelRef],
+    alias: models[modelRef]?.alias ?? "Doubao (via proxy)",
+  };
+
+  const defaultModel = {
+    id: modelId,
+    name: `Doubao (${modelId})`,
+    reasoning: false,
+    input: ["text"] as const,
+    cost: DOUBAO_PROXY_DEFAULT_COST,
+    contextWindow: DOUBAO_PROXY_DEFAULT_CONTEXT_WINDOW,
+    maxTokens: DOUBAO_PROXY_DEFAULT_MAX_TOKENS,
+  };
+
+  return applyProviderConfigWithDefaultModels(cfg, {
+    agentModels: models,
+    providerId: "doubao-proxy",
+    api: "openai-completions",
+    baseUrl,
+    defaultModels: [defaultModel],
+    defaultModelId: modelId,
+  });
+}
+
+export function applyDoubaoProxyConfig(
+  cfg: OpenClawConfig,
+  params?: { baseUrl?: string; modelId?: string },
+): OpenClawConfig {
+  const next = applyDoubaoProxyProviderConfig(cfg, params);
+  return applyAgentDefaultModelPrimary(next, `doubao-proxy/${params?.modelId ?? DOUBAO_PROXY_DEFAULT_MODEL_ID}`);
 }

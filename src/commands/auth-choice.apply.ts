@@ -5,6 +5,8 @@ import { applyAuthChoiceAnthropic } from "./auth-choice.apply.anthropic.js";
 import { applyAuthChoiceApiProviders } from "./auth-choice.apply.api-providers.js";
 import { applyAuthChoiceCopilotProxy } from "./auth-choice.apply.copilot-proxy.js";
 import { applyAuthChoiceDeepseekWeb } from "./auth-choice.apply.deepseek-web.js";
+import { applyAuthChoiceDoubaoProxy } from "./auth-choice.apply.doubao-proxy.js";
+import { applyAuthChoiceDoubaoWeb } from "./auth-choice.apply.doubao-web.js";
 import { applyAuthChoiceGitHubCopilot } from "./auth-choice.apply.github-copilot.js";
 import { applyAuthChoiceGoogleAntigravity } from "./auth-choice.apply.google-antigravity.js";
 import { applyAuthChoiceGoogleGeminiCli } from "./auth-choice.apply.google-gemini-cli.js";
@@ -34,6 +36,7 @@ export type ApplyAuthChoiceParams = {
     siliconflowGlobalApiKey?: string;
     siliconflowCnApiKey?: string;
     deepseekWebCookie?: string;
+    doubaoWebCookie?: string;
   };
 };
 
@@ -58,6 +61,8 @@ export async function applyAuthChoice(
     applyAuthChoiceCopilotProxy,
     applyAuthChoiceQwenPortal,
     applyAuthChoiceDeepseekWeb,
+    applyAuthChoiceDoubaoProxy,
+    applyAuthChoiceDoubaoWeb,
     applyAuthChoiceXAI,
   ];
 

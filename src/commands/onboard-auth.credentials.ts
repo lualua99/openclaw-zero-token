@@ -320,3 +320,47 @@ export async function setDeepseekWebCookie(
     agentDir: resolveAuthAgentDir(agentDir),
   });
 }
+
+export async function setDoubaoWebCookie(
+  options: { cookie: string; bearer?: string; userAgent?: string },
+  agentDir?: string,
+) {
+  let key: string;
+  
+  // 支持两种格式：
+  // 1. 旧的格式: {cookie: "{\"sessionid\":\"...\",\"ttwid\":\"...\"}"}
+  // 2. 新的格式: {cookie: "{\"sessionid\":\"...\",\"ttwid\":\"...\",\"fp\":\"...\",...}"}
+  
+  try {
+    // 尝试解析cookie字符串
+    const parsedCookie = JSON.parse(options.cookie);
+    
+    // 检查是否是DoubaoAuth对象格式
+    if (typeof parsedCookie === 'object' && parsedCookie !== null && parsedCookie.sessionid) {
+      // 已经是DoubaoAuth对象格式，直接使用
+      key = JSON.stringify(parsedCookie);
+    } else {
+      // 可能是其他格式，包装成DoubaoAuth对象
+      key = JSON.stringify({
+        sessionid: options.cookie, // 当作sessionid字符串
+        userAgent: options.userAgent || "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      });
+    }
+  } catch {
+    // 如果不是JSON，则当作简单的sessionid字符串
+    key = JSON.stringify({
+      sessionid: options.cookie,
+      userAgent: options.userAgent || "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    });
+  }
+  
+  upsertAuthProfile({
+    profileId: "doubao-web:default",
+    credential: {
+      type: "api_key",
+      provider: "doubao-web",
+      key,
+    },
+    agentDir: resolveAuthAgentDir(agentDir),
+  });
+}
